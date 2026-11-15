@@ -1,0 +1,8 @@
+__title__ = "kiteconnect"
+__description__ = "Kite Connect compatible client backed by the Upstox API"
+__url__ = "https://upstox.com/developer/api-documentation"
+__download_url__ = ""
+__version__ = "4.1.0+upstox.1"
+__author__ = "ui-trading-system (Upstox port)"
+__author_email__ = ""
+__license__ = "MIT"

@@ -291,7 +291,7 @@ if os.path.exists(config_path) and not _safety_parser.has_option("safety", "live
 elif not live_trading_enabled:
     logging.warning(
         "[safety] live_trading = false — DRY-RUN MODE: all order placement is "
-        "simulated and logged, nothing is sent to Zerodha."
+        "simulated and logged, nothing is sent to the broker (Upstox)."
     )
 
 
@@ -1020,7 +1020,7 @@ already_updating_order = 0
 
 
 kite = MonitoredKite(KiteConnect(api_key=api_key))
-website="https://kite.trade/connect/login?api_key="+api_key
+website=KiteConnect(api_key=api_key).login_url()  # Upstox OAuth dialog
 print(website) # This is link used to show the website to get access token
 print("-------------------------")
 
@@ -5291,19 +5291,16 @@ def initialise_ticker(kws_on_ticks, kws_on_connect, kws_on_order_update):
     Stores callbacks for potential re-initialization by the watchdog
     if the connection is lost (e.g., after laptop sleep).
 
-    On first call, starts a new Twisted reactor thread. On subsequent
-    calls (reconnection), reuses the existing reactor via
-    reactor.callFromThread for thread safety, and wraps on_connect
-    to auto-resubscribe stored instrument tokens.
+    Upstox edition: the KiteTicker runs its own websocket thread (no Twisted
+    reactor). On a watchdog-triggered re-initialisation the previous ticker
+    is closed first (so ticks are never delivered twice), a fresh one is
+    started, and on_connect is wrapped to auto-resubscribe stored tokens.
 
     Args:
         kws_on_ticks: Callback for tick data.
         kws_on_connect: Callback on successful connection.
         kws_on_order_update: Callback for order updates.
     """
-    from twisted.internet import reactor, ssl
-    from autobahn.twisted.websocket import connectWS
-
     global access_token
     global kws
     global _stored_ticker_callbacks
@@ -5322,7 +5319,13 @@ def initialise_ticker(kws_on_ticks, kws_on_connect, kws_on_order_update):
     #   2. Re-subscribe stored tokens after a watchdog-triggered reconnect.
     original_on_connect = kws_on_connect
     tokens_to_restore = list(_subscribed_tokens)
-    is_reconnect = reactor.running  # True on watchdog-triggered reconnects
+    previous_kws = globals().get("kws")
+    is_reconnect = previous_kws is not None  # True on watchdog-triggered reconnects
+    if previous_kws is not None:
+        try:
+            previous_kws.close()
+        except Exception as e:  # noqa: BLE001
+            logging.error("WATCHDOG: closing previous ticker failed: %s", e)
 
     def _wrapped_on_connect(ws, response):
         """Track connection time and re-subscribe tokens on reconnect."""
@@ -5347,25 +5350,9 @@ def initialise_ticker(kws_on_ticks, kws_on_connect, kws_on_order_update):
     kws.on_order_update = kws_on_order_update
     kws.on_noreconnect = _on_noreconnect_handler
 
-    if not reactor.running:
-        # First time: start reactor in a new thread
-        kws.connect(threaded=True)
-    else:
-        # Reconnect: reactor already running, use it thread-safely
-        kws._create_connection(
-            kws.socket_url,
-            useragent=kws._user_agent()
-        )
-        context_factory = ssl.ClientContextFactory()
-        reactor.callFromThread(
-            connectWS, kws.factory,
-            contextFactory=context_factory,
-            timeout=kws.connect_timeout
-        )
-        logging.error(
-            "WATCHDOG: Scheduled new WebSocket connection on "
-            "existing reactor."
-        )
+    kws.connect(threaded=True)
+    if is_reconnect:
+        logging.error("WATCHDOG: Previous ticker closed; new WebSocket connection started.")
 
 
 def _on_noreconnect_handler(ws):

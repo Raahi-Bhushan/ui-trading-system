@@ -111,10 +111,10 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
             <fieldset>
-                <legend>Zerodha Kite Connect</legend>
+                <legend>Upstox API app</legend>
                 <label for="api_key">API Key</label>
                 <input type="text" id="api_key" name="api_key" value="{{ form.get('api_key','') }}" required autocomplete="off">
-                <div class="hint">From <a href="https://developers.kite.trade/apps" target="_blank" style="color:#818cf8">developers.kite.trade/apps</a> — a Kite Connect app subscription is required.</div>
+                <div class="hint">From <a href="https://account.upstox.com/developer/apps" target="_blank" style="color:#818cf8">Upstox Developer Apps</a> (free). Set the app's Redirect URL to https://&lt;your-host&gt;/login.</div>
                 <label for="api_secret">API Secret</label>
                 <input type="password" id="api_secret" name="api_secret" required autocomplete="off">
             </fieldset>

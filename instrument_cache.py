@@ -430,7 +430,7 @@ def _sync_instruments_locked(kite: Any) -> bool:  # type: ignore[type-arg]
     cursor = conn.cursor()
     cursor.execute(
         "INSERT INTO sync_history (start_time, status) VALUES (?, ?)",
-        (start_time.isoformat(), "RUNNING"),
+        (start_time.replace(tzinfo=None).isoformat(sep=" "), "RUNNING"),  # sqlite3 TIMESTAMP converter needs "YYYY-MM-DD HH:MM:SS"
     )
     history_id = cursor.lastrowid
     conn.commit()
@@ -567,7 +567,7 @@ def _sync_instruments_locked(kite: Any) -> bool:  # type: ignore[type-arg]
                 WHERE id = ?
                 """,
                 (
-                    get_ist_now().isoformat(),
+                    get_ist_now().replace(tzinfo=None).isoformat(sep=" "),
                     status,
                     records_synced,
                     error_msg,

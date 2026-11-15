@@ -178,14 +178,14 @@ def _clear_login_failures(client_ip: str) -> None:
     with _login_attempts_lock:
         _login_attempts.pop(client_ip, None)
 
-# Create a redirect url
-redirect_url = "http://{host}:{port}/login".format(host=HOST, port=PORT)
+# Create a redirect url (Upstox edition: the public URL registered on the Upstox app)
+redirect_url = os.environ.get("UPSTOX_REDIRECT_URI") or "http://{host}:{port}/login".format(host=HOST, port=PORT)
 
-# Login url
-login_url = "https://kite.trade/connect/login?api_key={api_key}".format(api_key=kite_api_key)
+# Login url (Upstox OAuth dialog, built by the Upstox-backed kiteconnect package)
+login_url = KiteConnect(api_key=kite_api_key, redirect_uri=redirect_url).login_url()
 
-# Kite connect console url
-console_url = "https://developers.kite.trade/apps/{api_key}".format(api_key=kite_api_key)
+# Upstox developer console url
+console_url = "https://account.upstox.com/developer/apps"
 
 # App
 app = Flask(__name__)
@@ -697,7 +697,9 @@ def get_authenticated_kite_client(data: dict) -> KiteConnect:
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    request_token = request.args.get("request_token") or request.form.get("request_token")
+    # Upstox redirects back with ?code=...; Kite used ?request_token=...
+    request_token = (request.args.get("request_token") or request.form.get("request_token")
+                     or request.args.get("code") or request.form.get("code"))
     logging.info("[LOGIN] /login called via %s. request_token present: %s", request.method, bool(request_token))
 
     if not request_token:

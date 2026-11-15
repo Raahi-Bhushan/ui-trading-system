@@ -114,131 +114,85 @@ class TestSubscribeForTick:
 
 
 class TestInitialiseTicker:
-    """Tests for initialise_ticker storing callbacks."""
+    """Tests for initialise_ticker (Upstox KiteTicker: own thread, no Twisted reactor)."""
 
-    @patch('twisted.internet.reactor')
-    @patch('common_lib.KiteTicker')
-    def test_stores_callbacks(self, mock_ticker_class, mock_reactor):
-        """Test that initialise_ticker stores callbacks for watchdog reuse."""
-        # Arrange
+    @pytest.fixture(autouse=True)
+    def _reset(self):
         import common_lib
+        common_lib.kws = None
+        common_lib._subscribed_tokens = []
         common_lib.access_token = "test_token"
-        mock_kws = MagicMock()
-        mock_ticker_class.return_value = mock_kws
-        mock_reactor.running = False
+        yield
+        common_lib.kws = None
 
-        on_ticks = MagicMock()
-        on_connect = MagicMock()
-        on_order = MagicMock()
+    @patch('common_lib.KiteTicker')
+    def test_stores_callbacks(self, mock_ticker_class):
+        """Test that initialise_ticker stores callbacks for watchdog reuse."""
+        import common_lib
+        mock_ticker_class.return_value = MagicMock()
+        on_ticks, on_connect, on_order = MagicMock(), MagicMock(), MagicMock()
 
-        # Act
         common_lib.initialise_ticker(on_ticks, on_connect, on_order)
 
-        # Assert
         assert common_lib._stored_ticker_callbacks == {
             'on_ticks': on_ticks,
             'on_connect': on_connect,
             'on_order_update': on_order
         }
 
-    @patch('twisted.internet.reactor')
     @patch('common_lib.KiteTicker')
-    def test_sets_noreconnect_handler(self, mock_ticker_class, mock_reactor):
+    def test_sets_noreconnect_handler(self, mock_ticker_class):
         """Test that initialise_ticker sets on_noreconnect callback."""
-        # Arrange
         import common_lib
-        common_lib.access_token = "test_token"
         mock_kws = MagicMock()
         mock_ticker_class.return_value = mock_kws
-        mock_reactor.running = False
 
-        # Act
-        common_lib.initialise_ticker(
-            MagicMock(), MagicMock(), MagicMock()
-        )
+        common_lib.initialise_ticker(MagicMock(), MagicMock(), MagicMock())
 
-        # Assert
         assert mock_kws.on_noreconnect == common_lib._on_noreconnect_handler
 
-    @patch('twisted.internet.reactor')
     @patch('common_lib.KiteTicker')
-    def test_first_connect_starts_reactor(self, mock_ticker_class,
-                                          mock_reactor):
-        """Test that first call uses connect(threaded=True) to start reactor."""
-        # Arrange
+    def test_first_connect_starts_thread(self, mock_ticker_class):
+        """First call starts the ticker in its own thread."""
         import common_lib
-        common_lib.access_token = "test_token"
         mock_kws = MagicMock()
         mock_ticker_class.return_value = mock_kws
-        mock_reactor.running = False
 
-        # Act
-        common_lib.initialise_ticker(
-            MagicMock(), MagicMock(), MagicMock()
-        )
+        common_lib.initialise_ticker(MagicMock(), MagicMock(), MagicMock())
 
-        # Assert
         mock_kws.connect.assert_called_once_with(threaded=True)
 
-    @patch('autobahn.twisted.websocket.connectWS')
-    @patch('twisted.internet.reactor')
     @patch('common_lib.KiteTicker')
-    def test_reconnect_uses_existing_reactor(self, mock_ticker_class,
-                                             mock_reactor,
-                                             mock_connect_ws):
-        """Test that reconnect uses reactor.callFromThread instead of
-        starting a new reactor."""
-        # Arrange
+    def test_reconnect_closes_previous_ticker(self, mock_ticker_class):
+        """A watchdog re-init closes the old ticker before starting a new one."""
         import common_lib
-        common_lib.access_token = "test_token"
+        old = MagicMock()
+        common_lib.kws = old
         common_lib._subscribed_tokens = [256265]
-        mock_kws = MagicMock()
-        mock_ticker_class.return_value = mock_kws
-        mock_reactor.running = True
+        new = MagicMock()
+        mock_ticker_class.return_value = new
 
-        # Act
-        common_lib.initialise_ticker(
-            MagicMock(), MagicMock(), MagicMock()
-        )
+        common_lib.initialise_ticker(MagicMock(), MagicMock(), MagicMock())
 
-        # Assert - should NOT call connect(threaded=True)
-        mock_kws.connect.assert_not_called()
-        # Should create connection and use callFromThread
-        mock_kws._create_connection.assert_called_once()
-        mock_reactor.callFromThread.assert_called_once()
+        old.close.assert_called_once()
+        new.connect.assert_called_once_with(threaded=True)
+        assert common_lib.kws is new
 
-    @patch('autobahn.twisted.websocket.connectWS')
-    @patch('twisted.internet.reactor')
     @patch('common_lib.KiteTicker')
-    def test_reconnect_wraps_on_connect_for_resubscribe(
-        self, mock_ticker_class, mock_reactor, mock_connect_ws
-    ):
+    def test_reconnect_wraps_on_connect_for_resubscribe(self, mock_ticker_class):
         """Test that reconnect wraps on_connect to auto-resubscribe tokens."""
-        # Arrange
         import common_lib
-        common_lib.access_token = "test_token"
+        common_lib.kws = MagicMock()
         common_lib._subscribed_tokens = [256265, 260105]
         mock_kws = MagicMock()
         mock_ticker_class.return_value = mock_kws
-        mock_reactor.running = True
-
         original_on_connect = MagicMock()
 
-        # Act
-        common_lib.initialise_ticker(
-            MagicMock(), original_on_connect, MagicMock()
-        )
-
-        # Get the wrapped on_connect callback that was set on kws
-        wrapped_callback = mock_kws.on_connect
-
-        # Simulate the on_connect being called after reconnection
+        common_lib.initialise_ticker(MagicMock(), original_on_connect, MagicMock())
         with patch.object(common_lib, 'subscribe_for_tick') as mock_sub:
-            wrapped_callback(MagicMock(), MagicMock())
+            mock_kws.on_connect(MagicMock(), MagicMock())
 
-        # Assert - original callback should have been called
         original_on_connect.assert_called_once()
-        # And tokens should have been re-subscribed
         mock_sub.assert_called_once_with([256265, 260105])
 
 

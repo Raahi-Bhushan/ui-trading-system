@@ -21,6 +21,6 @@ pywebpush==2.3.0
 py-vapid==1.9.4
 holidays==0.96
 
-# Vendored Kite Connect SDK (includes local modifications, e.g. market
-# protection support). Installed from this repo, not PyPI.
-./vendor/pykiteconnect
+# Upstox edition: a Kite-compatible `kiteconnect` package backed by the
+# Upstox API (replaces the vendored Zerodha pykiteconnect).
+./vendor/upstox_kiteconnect
