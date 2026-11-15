@@ -24,7 +24,7 @@ log = logging.getLogger("kiteconnect.upstox")
 
 IST = _dt.timezone(_dt.timedelta(hours=5, minutes=30))
 MASTER_URL = "https://assets.upstox.com/market-quote/instruments/exchange/{ex}.json.gz"
-CACHE_VERSION = 4
+CACHE_VERSION = 5
 
 # upstox segment -> (kite exchange, kite segment for non-derivatives, token segment code)
 SEGMENTS = {
@@ -126,6 +126,8 @@ def convert(raw_rows: Iterable[Dict[str, Any]]) -> List[tuple]:
         freeze = float(r.get("freeze_quantity") or 0)
         if seg.endswith("_INDEX"):
             name = (r.get("name") or r.get("trading_symbol") or "").upper()
+            if kex == "BSE" and name.startswith("BSE "):  # Upstox "BSE SENSEX" -> Kite "SENSEX"
+                name = name[4:]
             out.append((token, ukey, kex, name, name, None, 0.0, 0.0, 0, "EQ", "INDICES", str(r.get("exchange_token") or ""), 0.0))
         elif seg.endswith("_EQ"):
             sym = r.get("trading_symbol") or ""
@@ -158,7 +160,7 @@ def convert(raw_rows: Iterable[Dict[str, Any]]) -> List[tuple]:
 class InstrumentMap:
     """Process-wide, day-scoped instrument lookup backed by a shared SQLite file.
 
-    The converted master lives in ``kite_instruments_v4_<date>.sqlite`` in the
+    The converted master lives in ``kite_instruments_v5_<date>.sqlite`` in the
     cache dir; every process (Flask app + each strategy script) queries it on
     demand and keeps only the instruments it actually touches in memory.
     """
@@ -276,6 +278,8 @@ class InstrumentMap:
         t = self.from_symbol(ex, sym) or self.from_symbol(ex, sym.upper())
         if t is None and ex in ("NSE", "BSE"):  # index names are case-insensitive in practice
             t = self._one("exch=? AND seg='INDICES' AND upper(tsym)=?", (ex, sym.upper()))
+            if t is None:  # Kite index name == Upstox key suffix, e.g. BSE_INDEX|SENSEX
+                t = self._one("ukey=?", (f"{ex}_INDEX|{sym.upper().replace(' ', '')}",))
         return t
 
     def from_symbol(self, exchange: str, tradingsymbol: str) -> Optional[tuple]:

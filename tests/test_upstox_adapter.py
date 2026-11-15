@@ -24,7 +24,7 @@ W1, W2, M = dt.date(2026, 11, 17), dt.date(2026, 11, 24), dt.date(2026, 11, 26)
 RAW = [
     {"segment": "NSE_INDEX", "name": "Nifty 50", "exchange": "NSE", "instrument_type": "INDEX",
      "instrument_key": "NSE_INDEX|Nifty 50", "exchange_token": "26000", "trading_symbol": "NIFTY"},
-    {"segment": "BSE_INDEX", "name": "SENSEX", "exchange": "BSE", "instrument_type": "INDEX",
+    {"segment": "BSE_INDEX", "name": "BSE SENSEX", "exchange": "BSE", "instrument_type": "INDEX",
      "instrument_key": "BSE_INDEX|SENSEX", "exchange_token": "1", "trading_symbol": "SENSEX"},
     {"segment": "NSE_EQ", "name": "RELIANCE INDUSTRIES LTD", "exchange": "NSE", "isin": "INE002A01018",
      "instrument_type": "EQ", "instrument_key": "NSE_EQ|INE002A01018", "lot_size": 1, "exchange_token": "2885",
@@ -97,6 +97,7 @@ def test_kite_symbols_and_tokens(imap):
     assert "NIFTY26NOVFUT" in rows
     assert "SENSEX26N1981000CE" in rows and "SENSEX26NOV81000CE" in rows   # monthly inferred without 'weekly'
     assert rows["NIFTY 50"]["segment"] == "INDICES" and rows["NIFTY 50"]["exchange"] == "NSE"
+    assert rows["SENSEX"]["segment"] == "INDICES" and rows["SENSEX"]["exchange"] == "BSE"   # Upstox "BSE SENSEX"
     assert rows["RELIANCE"]["tick_size"] == pytest.approx(0.10)
     w = rows["NIFTY26N1724500CE"]
     assert (w["exchange"], w["segment"], w["lot_size"], w["strike"], w["expiry"]) == ("NFO", "NFO-OPT", 75, 24500.0, W1)
